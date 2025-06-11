@@ -1,0 +1,167 @@
+<!-- index.html (Upgraded with a Search Bar) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Photo People Finder</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f0f2f5; color: #1c1e21; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; }
+        h1 { text-align: center; color: #0d6efd; }
+
+        /* --- NEW: Search Bar Styles --- */
+        #search-container { margin: 20px 0; text-align: center; }
+        #search-input { width: 50%; max-width: 400px; padding: 12px; font-size: 16px; border: 1px solid #ddd; border-radius: 20px; }
+        #search-input:focus { outline: none; border-color: #0d6efd; box-shadow: 0 0 5px rgba(13, 110, 253, 0.5); }
+
+        #clusters-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+        .cluster-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; text-align: center; padding-bottom: 10px; transition: transform 0.2s; }
+        .cluster-card:hover { transform: translateY(-5px); }
+        .cluster-card img { width: 100%; height: 200px; object-fit: cover; cursor: pointer; }
+        .cluster-card h3 { margin: 10px 0 5px; }
+        .cluster-card p { margin: 0 0 10px; color: #65676b; font-size: 14px; }
+        .cluster-card input { width: 80%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; }
+        .cluster-card button { background-color: #0d6efd; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+
+        /* Modal Styles (Unchanged) */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 1200px; border-radius: 8px; }
+        .close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .modal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 20px; }
+        .modal-grid img { width: 100%; height: auto; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>People in Your Photos</h1>
+
+        <!-- --- NEW: Search Bar HTML --- -->
+        <div id="search-container">
+            <input type="text" id="search-input" placeholder="Search for a person..." onkeyup="filterClusters()">
+        </div>
+
+        <p style="text-align:center;">Click on a person's photo to see all images in their cluster.</p>
+        <div id="clusters-container"></div>
+    </div>
+
+    <!-- The Modal for displaying cluster photos (Unchanged) -->
+    <div id="photo-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">×</span>
+            <h2 id="modal-title">Cluster Photos</h2>
+            <div id="modal-grid-container" class="modal-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        const clustersContainer = document.getElementById('clusters-container');
+        const modal = document.getElementById('photo-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalGrid = document.getElementById('modal-grid-container');
+
+        // Store the cluster data globally so the search function can access it
+        let allClustersData = {};
+
+        async function fetchAndDisplayClusters() {
+            clustersContainer.innerHTML = '<h2>Loading clusters...</h2>';
+            try {
+                const response = await fetch('/api/clusters');
+                if (!response.ok) {
+                    const error = await response.json();
+                    clustersContainer.innerHTML = `<h2>Error: ${error.error}</h2><p>Please run the indexer and clusterer scripts first.</p>`;
+                    return;
+                }
+                allClustersData = await response.json(); // Store data globally
+                renderClusters(allClustersData); // Call a new function to render the UI
+            } catch (error) {
+                clustersContainer.innerHTML = `<h2>Error loading data. Is the server running?</h2>`;
+            }
+        }
+
+        // New function to render the UI from data
+        function renderClusters(clustersToRender) {
+            clustersContainer.innerHTML = '';
+            if (Object.keys(clustersToRender).length === 0) {
+                clustersContainer.innerHTML = '<h2>No people found matching your search.</h2>';
+                return;
+            }
+            Object.keys(clustersToRender).sort((a,b) => a - b).forEach(clusterId => {
+                const cluster = clustersToRender[clusterId];
+                const card = document.createElement('div');
+                card.className = 'cluster-card';
+                card.id = `cluster-card-${clusterId}`; // Give each card a unique ID
+
+                // Added onclick to the image tag
+                card.innerHTML = `
+                    <img src="${cluster.representative_image}" alt="${cluster.name}" onclick="showClusterDetails(${clusterId}, '${cluster.name}')">
+                    <h3>${cluster.name}</h3>
+                    <p>${cluster.face_count} photos</p>
+                    <input type="text" placeholder="Enter name..." id="name-input-${clusterId}">
+                    <button onclick="nameCluster(${clusterId})">Save Name</button>
+                `;
+                clustersContainer.appendChild(card);
+            });
+        }
+
+        // --- NEW: Search Filter Logic ---
+        function filterClusters() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const filteredClusters = {};
+
+            for (const clusterId in allClustersData) {
+                const cluster = allClustersData[clusterId];
+                if (cluster.name.toLowerCase().includes(searchTerm)) {
+                    filteredClusters[clusterId] = cluster;
+                }
+            }
+            renderClusters(filteredClusters); // Re-render the UI with only the filtered results
+        }
+
+
+        // --- Functions for Modal and Naming (Unchanged) ---
+        async function showClusterDetails(clusterId, clusterName) {
+            modalTitle.innerText = `Photos for ${clusterName}`;
+            modalGrid.innerHTML = '<h3>Loading...</h3>';
+            modal.style.display = 'block';
+
+            const response = await fetch(`/api/cluster/${clusterId}`);
+            const data = await response.json();
+
+            modalGrid.innerHTML = '';
+            data.images.forEach(imageUrl => {
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                modalGrid.appendChild(img);
+            });
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+
+        async function nameCluster(clusterId) {
+            const input = document.getElementById(`name-input-${clusterId}`);
+            const newName = input.value.trim();
+            if (!newName) { alert("Please enter a name."); return; }
+            await fetch('/api/name-cluster', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cluster_id: clusterId, name: newName })
+            });
+            // After naming, re-fetch all data to update the global store and re-render
+            await fetchAndDisplayClusters();
+            // After re-rendering, apply the current search term again
+            filterClusters();
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Initial load
+        fetchAndDisplayClusters();
+    </script>
+</body>
+</html>

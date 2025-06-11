@@ -1,0 +1,27 @@
+# requirements.txt
+
+# Web framework and server
+fastapi
+uvicorn[standard]
+
+# Background task processing
+celery
+redis
+
+# --- CRITICAL VERSION LOCKING ---
+# We force older, stable versions to resolve the Keras/TensorFlow conflict.
+tensorflow==2.15.0
+keras==2.15.0
+# tf-keras is no longer needed with these older versions
+
+# The core face recognition library and its dependencies
+deepface
+numpy
+python-multipart
+opencv-python
+
+# Other tools for the application
+scikit-learn
+faiss-cpu
+pandas
+tqdm
